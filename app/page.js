@@ -1,101 +1,149 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import React, { useState, useEffect } from "react";
+import { toast } from "react-hot-toast";
+import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
+
+// SAMPLE lessons data (title, description, and the URL to navigate to).
+// We'll later store each lesson's progress in localStorage by its index.
+const lessonsData = [
+  {
+    id: 1,
+    title: "Introduction to Python",
+    description: "How to Learn Python Step by Step",
+    url: "/courses/python-intro",
+  },
+  {
+    id: 2,
+    title: "Complete Tutorial: Learn Data Python from Scratch",
+    description: "Advanced tutorial for data science with Python",
+    url: "/courses/python-data",
+  },
+  {
+    id: 3,
+    title: "More content",
+    description: "Lorem ipsum dolor sit amet",
+    url: "/courses/more",
+  },
+];
+
+// Helper hook for localStorage
+function useLocalStorage(key, initialValue) {
+  const [storedValue, setStoredValue] = useState(() => {
+    try {
+      const item =
+        typeof window !== "undefined" && window.localStorage.getItem(key);
+      return item ? JSON.parse(item) : initialValue;
+    } catch (error) {
+      console.error("useLocalStorage error:", error);
+      return initialValue;
+    }
+  });
+
+  const setValue = (value) => {
+    try {
+      setStoredValue(value);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(key, JSON.stringify(value));
+      }
+    } catch (error) {
+      console.error("useLocalStorage error:", error);
+    }
+  };
+
+  return [storedValue, setValue];
+}
+
+export default function HomePage() {
+  const router = useRouter();
+
+  // Each lesson is either completed (true) or not (false).
+  // Initialize all to 'false' unless we already have something in localStorage.
+  const [progress, setProgress] = useLocalStorage(
+    "roadmapProgress",
+    lessonsData.map(() => false)
+  );
+
+  // The avatar’s position is based on how many lessons are completed.
+  const completedCount = progress.filter(Boolean).length;
+
+  // Animate the avatar from step to step
+  const avatarVariants = {
+    initial: { y: 0 },
+    animate: {
+      // Example offset: 120px between steps
+      y: completedCount * 120,
+      transition: { type: "spring", stiffness: 100 },
+    },
+  };
+
+  // When a user clicks a lesson node:
+  // 1. Mark that lesson as completed
+  // 2. Show a toast message
+  // 3. Navigate to the lesson page
+  const handleLessonClick = (index) => {
+    const updated = [...progress];
+    updated[index] = true; // Mark this lesson as completed
+    setProgress(updated);
+
+    toast.success(`Navigating to ${lessonsData[index].title}...`);
+
+    // Navigate to that lesson’s URL
+    router.push(lessonsData[index].url);
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.js
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <main className="min-h-screen bg-black text-white p-6">
+      <h1 className="text-3xl font-bold mb-8">Interactive Roadmap</h1>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      <div className="relative mx-auto max-w-xl">
+        {/* A vertical line down the middle (we can style or replace with an SVG path later) */}
+        <div className="absolute left-1/2 top-0 -translate-x-1/2 w-px h-full bg-gray-700" />
+
+        {/* The “avatar” that moves according to completed steps */}
+        <motion.div
+          className="absolute left-1/2 -translate-x-1/2 w-12 h-12 bg-pink-600 rounded-full flex items-center justify-center z-10"
+          variants={avatarVariants}
+          initial="initial"
+          animate="animate"
+        >
+          {/* Could replace with an actual image */}
+          <span className="text-xl">👤</span>
+        </motion.div>
+
+        {/* Lesson circles */}
+        <div className="flex flex-col items-center space-y-20 pt-4">
+          {lessonsData.map((lesson, index) => (
+            <div
+              key={lesson.id}
+              className="relative flex flex-col items-center"
+            >
+              {/* The circle for the node */}
+              <button
+                onClick={() => handleLessonClick(index)}
+                className={`w-10 h-10 rounded-full flex items-center justify-center 
+                  ${
+                    progress[index]
+                      ? "bg-green-600"
+                      : "bg-blue-600 hover:bg-blue-500"
+                  }
+                `}
+                aria-label={`Lesson ${lesson.title}`}
+              >
+                {/* If completed, show a checkmark; otherwise show the step number */}
+                {progress[index] ? "✓" : index + 1}
+              </button>
+
+              {/* Lesson info text */}
+              <div className="mt-3 text-center px-2">
+                <h2 className="font-semibold text-lg">{lesson.title}</h2>
+                <p className="text-gray-400 text-sm">{lesson.description}</p>
+              </div>
+            </div>
+          ))}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+      </div>
+    </main>
   );
 }
