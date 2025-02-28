@@ -4,37 +4,17 @@ import React, { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { roadmapData } from "../data/roadmapData";
 
-// SAMPLE lessons data (title, description, and the URL to navigate to).
-// We'll later store each lesson's progress in localStorage by its index.
-const lessonsData = [
-  {
-    id: 1,
-    title: "Introduction to Python",
-    description: "How to Learn Python Step by Step",
-    url: "/courses/python-intro",
-  },
-  {
-    id: 2,
-    title: "Complete Tutorial: Learn Data Python from Scratch",
-    description: "Advanced tutorial for data science with Python",
-    url: "/courses/python-data",
-  },
-  {
-    id: 3,
-    title: "More content",
-    description: "Lorem ipsum dolor sit amet",
-    url: "/courses/more",
-  },
-];
-
-// Helper hook for localStorage
+// Helper hook for managing localStorage
 function useLocalStorage(key, initialValue) {
   const [storedValue, setStoredValue] = useState(() => {
     try {
-      const item =
-        typeof window !== "undefined" && window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
+      if (typeof window !== "undefined") {
+        const item = window.localStorage.getItem(key);
+        return item ? JSON.parse(item) : initialValue;
+      }
+      return initialValue;
     } catch (error) {
       console.error("useLocalStorage error:", error);
       return initialValue;
@@ -58,39 +38,41 @@ function useLocalStorage(key, initialValue) {
 export default function HomePage() {
   const router = useRouter();
 
-  // Each lesson is either completed (true) or not (false).
-  // Initialize all to 'false' unless we already have something in localStorage.
+  // Initialize progress for each lesson (all false by default)
   const [progress, setProgress] = useLocalStorage(
     "roadmapProgress",
-    lessonsData.map(() => false)
+    roadmapData.map(() => false)
   );
 
-  // The avatar’s position is based on how many lessons are completed.
+  // Prevent hydration mismatches by waiting until the component mounts
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  if (!mounted) return null;
+
+  // Calculate completed lessons count for avatar positioning
   const completedCount = progress.filter(Boolean).length;
 
-  // Animate the avatar from step to step
+  // Define avatar animation variants based on completedCount
   const avatarVariants = {
     initial: { y: 0 },
     animate: {
-      // Example offset: 120px between steps
-      y: completedCount * 120,
+      y: completedCount * 120, // 120px per completed lesson
       transition: { type: "spring", stiffness: 100 },
     },
   };
 
-  // When a user clicks a lesson node:
-  // 1. Mark that lesson as completed
-  // 2. Show a toast message
-  // 3. Navigate to the lesson page
+  // Handle lesson click: update progress, show toast, then navigate
   const handleLessonClick = (index) => {
     const updated = [...progress];
-    updated[index] = true; // Mark this lesson as completed
+    updated[index] = true;
     setProgress(updated);
 
-    toast.success(`Navigating to ${lessonsData[index].title}...`);
+    toast.success(`Navigating to ${roadmapData[index].moduleTitle}...`);
 
-    // Navigate to that lesson’s URL
-    router.push(lessonsData[index].url);
+    // Use the dynamic slug to navigate
+    router.push(`/courses/${roadmapData[index].slug}`);
   };
 
   return (
@@ -98,46 +80,40 @@ export default function HomePage() {
       <h1 className="text-3xl font-bold mb-8">Interactive Roadmap</h1>
 
       <div className="relative mx-auto max-w-xl">
-        {/* A vertical line down the middle (we can style or replace with an SVG path later) */}
+        {/* Vertical line */}
         <div className="absolute left-1/2 top-0 -translate-x-1/2 w-px h-full bg-gray-700" />
 
-        {/* The “avatar” that moves according to completed steps */}
+        {/* Animated avatar */}
         <motion.div
           className="absolute left-1/2 -translate-x-1/2 w-12 h-12 bg-pink-600 rounded-full flex items-center justify-center z-10"
           variants={avatarVariants}
           initial="initial"
           animate="animate"
         >
-          {/* Could replace with an actual image */}
           <span className="text-xl">👤</span>
         </motion.div>
 
-        {/* Lesson circles */}
+        {/* Lesson nodes */}
         <div className="flex flex-col items-center space-y-20 pt-4">
-          {lessonsData.map((lesson, index) => (
+          {roadmapData.map((lesson, index) => (
             <div
               key={lesson.id}
               className="relative flex flex-col items-center"
             >
-              {/* The circle for the node */}
               <button
                 onClick={() => handleLessonClick(index)}
-                className={`w-10 h-10 rounded-full flex items-center justify-center 
-                  ${
-                    progress[index]
-                      ? "bg-green-600"
-                      : "bg-blue-600 hover:bg-blue-500"
-                  }
-                `}
-                aria-label={`Lesson ${lesson.title}`}
+                className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                  progress[index]
+                    ? "bg-green-600"
+                    : "bg-blue-600 hover:bg-blue-500"
+                }`}
+                aria-label={`Lesson ${lesson.moduleTitle}`}
               >
-                {/* If completed, show a checkmark; otherwise show the step number */}
                 {progress[index] ? "✓" : index + 1}
               </button>
 
-              {/* Lesson info text */}
               <div className="mt-3 text-center px-2">
-                <h2 className="font-semibold text-lg">{lesson.title}</h2>
+                <h2 className="font-semibold text-lg">{lesson.moduleTitle}</h2>
                 <p className="text-gray-400 text-sm">{lesson.description}</p>
               </div>
             </div>
