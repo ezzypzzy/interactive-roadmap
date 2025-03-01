@@ -282,28 +282,28 @@ export default function HomePage() {
   const avatarPathRef = useRef(null);
   const [pathLength, setPathLength] = useState(0);
   // Store previous avatar index to animate only new segments
-  const [prevAvatarIndex, setPrevAvatarIndex] = useState(avatarIndex);
+  const [prevAvatarIndex, setPrevAvatarIndex] = useState(0);
   // Ref to detect the first animation (page refresh scenario)
-  const isFirstAnimation = useRef(true);
 
-  // Animate avatar along the appropriate path when avatarIndex changes
+  // Effect to animate the avatar along the appropriate path.
   useEffect(() => {
     let animPathString = "";
-    // On first mount, animate full path from start to current checkpoint.
-    if (isFirstAnimation.current) {
+    if (prevAvatarIndex === 0 && avatarIndex > 0) {
+      // On initial mount with progress, animate full path from start to current checkpoint.
       animPathString = getFullPath(stepPositions, avatarIndex, 8);
-      isFirstAnimation.current = false;
     } else if (avatarIndex > prevAvatarIndex) {
-      // Animate only the new segment from previous checkpoint to new checkpoint.
+      // New lesson clicked: animate only from previous checkpoint to new checkpoint.
       animPathString = getRoundedZigZagPath(
         stepPositions[prevAvatarIndex],
         stepPositions[avatarIndex],
         8
       );
     } else {
-      return; // No new animation needed if avatarIndex hasn't increased.
+      return; // No new animation needed.
     }
+
     if (animPathString && avatarPathRef.current) {
+      // Update the invisible path's "d" attribute.
       avatarPathRef.current.setAttribute("d", animPathString);
       const length = avatarPathRef.current.getTotalLength();
       setPathLength(length);
@@ -315,6 +315,12 @@ export default function HomePage() {
       return () => controls.stop();
     }
   }, [avatarIndex, stepPositions, prevAvatarIndex, pathProgress]);
+
+  // Sync avatar motion values with computed avatarPosition when container dimensions update.
+  useEffect(() => {
+    avatarX.set(avatarPosition.x);
+    avatarY.set(avatarPosition.y);
+  }, [avatarPosition, avatarX, avatarY]);
 
   // Update avatarX and avatarY as pathProgress changes.
   useEffect(() => {
