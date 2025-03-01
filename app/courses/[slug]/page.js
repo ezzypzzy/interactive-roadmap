@@ -1,6 +1,6 @@
 import { roadmapData } from "@/data/roadmapData";
 
-export default function CoursePage({ params }) {
+export default async function CoursePage({ params }) {
   const { slug } = params;
 
   // Find the lesson/module that matches the slug

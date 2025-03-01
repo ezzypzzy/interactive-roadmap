@@ -52,18 +52,135 @@ function useIsMobile() {
   return isMobile;
 }
 
-// Return a polyline string with three 90-degree turns (four segments total).
-function getZigZagPoints(start, end) {
+/**
+ * Helper function to get direction of a segment (vertical/horizontal).
+ * Returns "up", "down", "left", or "right" for 90° lines, or null otherwise.
+ */
+function getDirection(p0, p1) {
+  if (p1.x === p0.x) {
+    return p1.y > p0.y ? "down" : "up";
+  } else if (p1.y === p0.y) {
+    return p1.x > p0.x ? "right" : "left";
+  }
+  return null; // for non-90° lines
+}
+
+/**
+ * For two directions (e.g., "down" -> "right"), returns the geometry needed
+ * to draw a 90° arc at the corner point. The `lineStart` is where we finish
+ * the straight segment before the corner, and `arcEnd` is where the arc finishes,
+ * so that we can continue the next line from there.
+ *
+ * The `sweep` flag (0 or 1) tells SVG which way to draw the arc.
+ */
+function cornerArc(d1, d2, corner, r) {
+  if (!d1 || !d2 || d1 === d2) return null;
+
+  const map = {
+    "down->right": {
+      lineStart: { x: corner.x, y: corner.y - r },
+      arcEnd: { x: corner.x + r, y: corner.y },
+      sweep: 0,
+    },
+    "down->left": {
+      lineStart: { x: corner.x, y: corner.y - r },
+      arcEnd: { x: corner.x - r, y: corner.y },
+      sweep: 1,
+    },
+    "up->right": {
+      lineStart: { x: corner.x, y: corner.y + r },
+      arcEnd: { x: corner.x + r, y: corner.y },
+      sweep: 1,
+    },
+    "up->left": {
+      lineStart: { x: corner.x, y: corner.y + r },
+      arcEnd: { x: corner.x - r, y: corner.y },
+      sweep: 0,
+    },
+    "left->down": {
+      lineStart: { x: corner.x + r, y: corner.y },
+      arcEnd: { x: corner.x, y: corner.y + r },
+      sweep: 0,
+    },
+    "left->up": {
+      lineStart: { x: corner.x + r, y: corner.y },
+      arcEnd: { x: corner.x, y: corner.y - r },
+      sweep: 1,
+    },
+    "right->down": {
+      lineStart: { x: corner.x - r, y: corner.y },
+      arcEnd: { x: corner.x, y: corner.y + r },
+      sweep: 1,
+    },
+    "right->up": {
+      lineStart: { x: corner.x - r, y: corner.y },
+      arcEnd: { x: corner.x, y: corner.y - r },
+      sweep: 0,
+    },
+  };
+
+  const key = `${d1}->${d2}`;
+  return map[key] || null;
+}
+
+/**
+ * Return a path string with three 90-degree turns (four segments total), but
+ * each corner is drawn with an arc instead of a sharp turn.
+ */
+function getRoundedZigZagPath(start, end, radius = 8) {
   // mid1 & mid2 define intermediate y-coordinates to create the zig-zag
   const mid1 = (start.y + end.y) / 2 - 40;
   const mid2 = (start.y + end.y) / 2 + 40;
-  return [
-    `${start.x},${start.y}`, // start
-    `${start.x},${mid1}`, // vertical
-    `${end.x},${mid1}`, // horizontal
-    `${end.x},${mid2}`, // vertical
-    `${end.x},${end.y}`, // final horizontal
-  ].join(" ");
+
+  // The 5 key points in the path
+  const p0 = { x: start.x, y: start.y };
+  const p1 = { x: start.x, y: mid1 };
+  const p2 = { x: end.x, y: mid1 };
+  const p3 = { x: end.x, y: mid2 };
+  const p4 = { x: end.x, y: end.y };
+
+  // Directions for each segment
+  const d1 = getDirection(p0, p1);
+  const d2 = getDirection(p1, p2);
+  const d3 = getDirection(p2, p3);
+  const d4 = getDirection(p3, p4);
+
+  // Start building the path
+  let path = `M ${p0.x},${p0.y}`;
+
+  // Corner 1 (between segments 1 and 2) at p1
+  const c1 = cornerArc(d1, d2, p1, radius);
+  if (c1) {
+    path += ` L ${c1.lineStart.x},${c1.lineStart.y}`;
+    path += ` A ${radius} ${radius} 0 0 ${c1.sweep} ${c1.arcEnd.x},${c1.arcEnd.y}`;
+  } else {
+    path += ` L ${p1.x},${p1.y}`;
+  }
+
+  // Corner 2 (between segments 2 and 3) at p2
+  const c2 = cornerArc(d2, d3, p2, radius);
+  if (c2) {
+    path += ` L ${c2.lineStart.x},${c2.lineStart.y}`;
+    path += ` A ${radius} ${radius} 0 0 ${c2.sweep} ${c2.arcEnd.x},${c2.arcEnd.y}`;
+  } else {
+    path += ` L ${p2.x},${p2.y}`;
+  }
+
+  // Corner 3 (between segments 3 and 4) at p3
+  // For typical zig-zag, p3 -> p4 might be the same direction (both vertical),
+  // so there's no corner. But we handle it generally:
+  const c3 = cornerArc(d3, d4, p3, radius);
+  if (c3) {
+    path += ` L ${c3.lineStart.x},${c3.lineStart.y}`;
+    path += ` A ${radius} ${radius} 0 0 ${c3.sweep} ${c3.arcEnd.x},${c3.arcEnd.y}`;
+  } else {
+    path += ` L ${p3.x},${p3.y}`;
+  }
+
+  // Finally line to p4
+  path += ` L ${p4.x},${p4.y}`;
+
+  return path;
 }
 
 export default function HomePage() {
@@ -116,7 +233,7 @@ export default function HomePage() {
   // Dynamically calculate the positions for each lesson/node
   // For the first and last nodes, we center them horizontally.
   // For the intermediate nodes, alternate between left and right.
-  const horizontalPadding = 20; // a small padding from the edge
+  const horizontalPadding = 24; // a small padding from the edge
   const stepPositions = roadmapData.map((_, index) => {
     let x;
     if (index === 0 || index === totalSteps - 1) {
@@ -181,7 +298,7 @@ export default function HomePage() {
           maxWidth: isMobile ? "300px" : "480px",
         }}
       >
-        {/* Render the SVG for the zig-zag path */}
+        {/* Render the paths for each segment from step i to step i+1 */}
         <svg
           className="absolute inset-0 w-full h-full"
           viewBox={`0 0 ${actualWidth} ${computedHeight}`}
@@ -190,21 +307,22 @@ export default function HomePage() {
         >
           <defs>
             {/* Define a linear gradient for completed segments */}
-            <linearGradient
-              id="pathGradient"
-              x1="0"
-              y1="0"
-              x2="1"
-              y2="0"
-              gradientUnits="userSpaceOnUse"
-            >
-              <stop offset="0%" stopColor="#8A2BE2" /> {/* violet */}
-              <stop offset="50%" stopColor="#FF00FF" /> {/* magenta */}
-              <stop offset="100%" stopColor="#FF1493" /> {/* pink/red */}
+            <linearGradient id="pathGradient" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#D22D1E" />
+              <stop offset="50%" stopColor="#963AB1" />
+              <stop offset="100%" stopColor="#20469B" />
             </linearGradient>
+
+            {/* Define a neon glow filter */}
+            <filter id="neonGlow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
           </defs>
 
-          {/* Draw polylines from step i to step i+1 */}
           {roadmapData.map((_, index) => {
             if (index === roadmapData.length - 1) return null;
             const start = stepPositions[index];
@@ -213,13 +331,19 @@ export default function HomePage() {
             // If user has completed step index, consider the segment "completed"
             const isSegmentComplete = progress[index];
 
+            // Build the arc-based path
+            const d = getRoundedZigZagPath(start, end, 8);
+
             return (
-              <polyline
+              <path
                 key={index}
-                points={getZigZagPoints(start, end)}
+                d={d}
                 stroke={isSegmentComplete ? "url(#pathGradient)" : "#40373C"}
                 strokeWidth="4"
                 strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+                filter={isSegmentComplete ? "url(#neonGlow)" : undefined}
               />
             );
           })}
