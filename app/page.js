@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { toast } from "react-hot-toast";
-import { motion } from "framer-motion";
+import { motion, animate, useMotionValue } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { roadmapData } from "../data/roadmapData";
 import { CheckIcon } from "./components/Icons";
@@ -183,6 +183,26 @@ function getRoundedZigZagPath(start, end, radius = 8) {
   return path;
 }
 
+/**
+ * Helper function to build a single continuous path string from the start (index 0)
+ * to the current checkpoint (avatarIndex) by concatenating each segment's path.
+ */
+function getFullPath(positions, avatarIndex, radius = 8) {
+  if (avatarIndex === 0) return "";
+  let fullPath = "";
+  for (let i = 0; i < avatarIndex; i++) {
+    let segment = getRoundedZigZagPath(positions[i], positions[i + 1], radius);
+    if (i > 0) {
+      const firstL = segment.indexOf("L");
+      if (firstL !== -1) {
+        segment = segment.substring(firstL);
+      }
+    }
+    fullPath += segment + " ";
+  }
+  return fullPath.trim();
+}
+
 export default function HomePage() {
   const router = useRouter();
   const isMobile = useIsMobile();
@@ -218,7 +238,6 @@ export default function HomePage() {
   useEffect(() => {
     setMounted(true);
   }, []);
-  if (!mounted) return null;
 
   // Define layout parameters based on device type
   const totalSteps = roadmapData.length;
@@ -256,32 +275,89 @@ export default function HomePage() {
   // Determine which step is the next step after the avatar
   const nextStepIndex = avatarIndex < totalSteps - 1 ? avatarIndex : -1;
 
-  // Convert a coordinate to percentage relative to the dynamic SVG viewBox
+  // Motion values for avatar animation along the SVG path
+  const pathProgress = useMotionValue(0);
+  const avatarX = useMotionValue(avatarPosition.x);
+  const avatarY = useMotionValue(avatarPosition.y);
+  const avatarPathRef = useRef(null);
+  const [pathLength, setPathLength] = useState(0);
+  // Store previous avatar index to animate only new segments
+  const [prevAvatarIndex, setPrevAvatarIndex] = useState(avatarIndex);
+  // Ref to detect the first animation (page refresh scenario)
+  const isFirstAnimation = useRef(true);
+
+  // Animate avatar along the appropriate path when avatarIndex changes
+  useEffect(() => {
+    let animPathString = "";
+    // On first mount, animate full path from start to current checkpoint.
+    if (isFirstAnimation.current) {
+      animPathString = getFullPath(stepPositions, avatarIndex, 8);
+      isFirstAnimation.current = false;
+    } else if (avatarIndex > prevAvatarIndex) {
+      // Animate only the new segment from previous checkpoint to new checkpoint.
+      animPathString = getRoundedZigZagPath(
+        stepPositions[prevAvatarIndex],
+        stepPositions[avatarIndex],
+        8
+      );
+    } else {
+      return; // No new animation needed if avatarIndex hasn't increased.
+    }
+    if (animPathString && avatarPathRef.current) {
+      avatarPathRef.current.setAttribute("d", animPathString);
+      const length = avatarPathRef.current.getTotalLength();
+      setPathLength(length);
+      pathProgress.set(0);
+      const controls = animate(pathProgress, 1, {
+        duration: 1,
+        ease: "easeInOut",
+      });
+      return () => controls.stop();
+    }
+  }, [avatarIndex, stepPositions, prevAvatarIndex, pathProgress]);
+
+  // Update avatarX and avatarY as pathProgress changes.
+  useEffect(() => {
+    const unsubscribe = pathProgress.onChange((latest) => {
+      if (avatarPathRef.current && pathLength) {
+        const point = avatarPathRef.current.getPointAtLength(
+          latest * pathLength
+        );
+        avatarX.set(point.x);
+        avatarY.set(point.y);
+      }
+    });
+    return unsubscribe;
+  }, [pathProgress, pathLength, avatarX, avatarY]);
+
+  // When animation completes (pathProgress reaches 1) for a new segment, update prevAvatarIndex.
+  useEffect(() => {
+    const unsubscribe = pathProgress.onChange((latest) => {
+      if (latest === 1 && avatarIndex > prevAvatarIndex) {
+        setPrevAvatarIndex(avatarIndex);
+      }
+    });
+    return unsubscribe;
+  }, [pathProgress, avatarIndex, prevAvatarIndex]);
+
+  // Convert a coordinate to percentage for node positioning.
   const toPercentage = (point) => ({
     left: `${(point.x / actualWidth) * 100}%`,
     top: `${(point.y / computedHeight) * 100}%`,
   });
 
-  // Animate the avatar from its previous position to the new one using percentages
-  const avatarVariants = {
-    initial: toPercentage(stepPositions[0]),
-    animate: {
-      ...toPercentage(avatarPosition),
-      transition: { type: "spring", stiffness: 100 },
-    },
-  };
-
-  // Handle lesson click: update progress, show toast, then navigate
+  // Handle lesson click: show toast immediately, then navigate after 1 second.
   const handleLessonClick = (index) => {
     const updated = [...progress];
     updated[index] = true;
     setProgress(updated);
-
     toast.success(`Navigating to ${roadmapData[index].moduleTitle}...`);
-    router.push(`/courses/${roadmapData[index].slug}`);
+    setTimeout(() => {
+      router.push(`/courses/${roadmapData[index].slug}`);
+    }, 1000);
   };
 
-  return (
+  return mounted ? (
     <main className="min-h-screen my-8">
       <h1 className="text-3xl font-bold text-gray-300 px-8 sm:px-16 text-center sm:text-left">
         Interactive Roadmap
@@ -298,7 +374,7 @@ export default function HomePage() {
           maxWidth: isMobile ? "300px" : "480px",
         }}
       >
-        {/* Render the paths for each segment from step i to step i+1 */}
+        {/* SVG: renders the road paths and an invisible path for avatar animation */}
         <svg
           className="absolute inset-0 w-full h-full"
           viewBox={`0 0 ${actualWidth} ${computedHeight}`}
@@ -312,8 +388,7 @@ export default function HomePage() {
               <stop offset="50%" stopColor="#963AB1" />
               <stop offset="100%" stopColor="#20469B" />
             </linearGradient>
-
-            {/* Define a neon glow filter */}
+            {/* Neon glow filter */}
             <filter id="neonGlow" x="-50%" y="-50%" width="200%" height="200%">
               <feGaussianBlur stdDeviation="4" result="blur" />
               <feMerge>
@@ -347,20 +422,24 @@ export default function HomePage() {
               />
             );
           })}
+          {/* Invisible path for avatar motion */}
+          <path
+            ref={avatarPathRef}
+            fill="none"
+            stroke="none"
+            style={{ opacity: 0 }}
+          />
         </svg>
 
-        {/* Animated avatar (location-marker style) that moves to the last completed step */}
+        {/* Animated avatar following the curved road */}
         <motion.div
           className="absolute z-30 flex flex-col items-center"
-          variants={avatarVariants}
-          initial="initial"
-          animate="animate"
           style={{
-            // Shift left by 50% to center horizontally, shift up by 100% so the tip is the anchor
+            left: avatarX,
+            top: avatarY,
             transform: "translate(-50%, -100%)",
           }}
         >
-          {/* Circular top with white border and user image inside */}
           <div className="w-10 h-10 rounded-full border-2 border-white bg-white overflow-hidden flex items-center justify-center">
             <img
               src="/images/user.jpg"
@@ -368,8 +447,6 @@ export default function HomePage() {
               className="object-cover w-full h-full"
             />
           </div>
-
-          {/* Triangular pointer below the circle */}
           <div className="w-0 h-0 border-l-4 border-r-4 border-l-transparent border-r-transparent border-t-6 border-t-white bg-cover" />
         </motion.div>
 
@@ -384,18 +461,13 @@ export default function HomePage() {
             index === 0 || index === roadmapData.length - 1
               ? ""
               : isMobile
-              ? isRightSide(pos, actualWidth)
+              ? pos.x > actualWidth / 2
                 ? "-ml-32"
                 : "ml-32"
-              : isRightSide(pos, actualWidth)
+              : pos.x > actualWidth / 2
               ? "-ml-32"
               : "ml-32";
 
-          function isRightSide(position, width) {
-            return position.x > width / 2;
-          }
-
-          // Convert absolute coordinates to percentages for responsiveness
           const posPercent = {
             left: `${(pos.x / actualWidth) * 100}%`,
             top: `${(pos.y / computedHeight) * 100}%`,
@@ -451,5 +523,5 @@ export default function HomePage() {
         })}
       </div>
     </main>
-  );
+  ) : null;
 }
