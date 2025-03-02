@@ -352,15 +352,37 @@ export default function HomePage() {
     top: `${(point.y / computedHeight) * 100}%`,
   });
 
-  // Handle lesson click: show toast immediately, then navigate after 1 second.
+  // Handle lesson click: mark progress, animate avatar, and then navigate.
   const handleLessonClick = (index) => {
+    if (progress[index]) {
+      toast.success(`Navigating to ${roadmapData[index].moduleTitle}...`);
+      setTimeout(() => {
+        router.push(`/courses/${roadmapData[index].slug}`);
+      }, 1000);
+      return;
+    }
+
     const updated = [...progress];
     updated[index] = true;
     setProgress(updated);
-    toast.success(`Navigating to ${roadmapData[index].moduleTitle}...`);
-    setTimeout(() => {
-      router.push(`/courses/${roadmapData[index].slug}`);
-    }, 1000);
+
+    // Create a promise that resolves after 1 second to mimic avatar animation completion.
+    const animationPromise = new Promise((resolve) => {
+      setTimeout(resolve, 1000);
+    });
+
+    toast.promise(animationPromise, {
+      loading: `Completing ${roadmapData[index].moduleTitle}`,
+      success: `Navigating to ${roadmapData[index + 1].moduleTitle}...`,
+      error: `Failed to complete ${roadmapData[index].moduleTitle}`,
+    });
+
+    // Once the animation completes, wait another second before navigating.
+    animationPromise.then(() => {
+      setTimeout(() => {
+        router.push(`/courses/${roadmapData[index].slug}`);
+      }, 1000);
+    });
   };
 
   return mounted ? (
