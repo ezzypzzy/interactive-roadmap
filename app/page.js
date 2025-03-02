@@ -321,7 +321,7 @@ export default function HomePage() {
     avatarY.set(avatarPosition.y);
   }, [avatarPosition, avatarX, avatarY]);
 
-  // Update avatarX and avatarY as pathProgress changes.
+  // Update avatar position and update prevAvatarIndex when animation completes.
   useEffect(() => {
     const unsubscribe = pathProgress.on("change", (latest) => {
       if (avatarPathRef.current && pathLength) {
@@ -331,23 +331,20 @@ export default function HomePage() {
         avatarX.set(point.x);
         avatarY.set(point.y);
       }
-    });
-    return unsubscribe;
-  }, [pathProgress, pathLength, avatarX, avatarY]);
-
-  // When animation completes (pathProgress reaches 1) for a new segment, update prevAvatarIndex.
-  useEffect(() => {
-    const unsubscribe = pathProgress.on("change", (latest) => {
-      if (avatarPathRef.current && pathLength) {
-        const point = avatarPathRef.current.getPointAtLength(
-          latest * pathLength
-        );
-        avatarX.set(point.x);
-        avatarY.set(point.y);
+      // When the animation completes, update prevAvatarIndex
+      if (latest === 1 && avatarIndex > prevAvatarIndex) {
+        setPrevAvatarIndex(avatarIndex);
       }
     });
     return unsubscribe;
-  }, [pathProgress, pathLength, avatarX, avatarY]);
+  }, [
+    pathProgress,
+    pathLength,
+    avatarX,
+    avatarY,
+    avatarIndex,
+    prevAvatarIndex,
+  ]);
 
   // Convert a coordinate to percentage for node positioning.
   const toPercentage = (point) => ({
