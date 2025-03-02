@@ -2,7 +2,7 @@ import Link from "next/link";
 import { roadmapData } from "@/data/roadmapData";
 
 export default async function CoursePage({ params }) {
-  const { slug } = params;
+  const { slug } = await params;
 
   // Find the lesson/module that matches the slug
   const lesson = roadmapData.find((item) => item.slug === slug);
@@ -53,7 +53,7 @@ export default async function CoursePage({ params }) {
         </span>
       </p>
       <Link href="/">
-        <button className="my-4 px-4 py-2 cursor-pointer bg-blue-600 text-black rounded hover:bg-blue-700">
+        <button className="my-4 px-4 py-2 cursor-pointer bg-[rgba(80,108,240,1)] text-black rounded hover:bg-[rgba(80,108,240,0.8)]">
           ⬅ Back
         </button>
       </Link>

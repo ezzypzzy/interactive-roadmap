@@ -264,12 +264,11 @@ export default function HomePage() {
     return { x, y };
   });
 
-  // Number of lessons completed
-  const completedCount = progress.filter(Boolean).length;
-
-  // The avatar jumps to the position of the last completed step.
-  // If no steps are completed, it stays at step 0.
-  const avatarIndex = Math.min(completedCount, roadmapData.length - 1);
+  const lastCompletedIndex = progress.lastIndexOf(true);
+  const avatarIndex =
+    lastCompletedIndex === -1
+      ? 0
+      : Math.min(lastCompletedIndex + 1, roadmapData.length - 1);
   const avatarPosition = stepPositions[avatarIndex];
 
   // Determine which step is the next step after the avatar
@@ -324,7 +323,7 @@ export default function HomePage() {
 
   // Update avatarX and avatarY as pathProgress changes.
   useEffect(() => {
-    const unsubscribe = pathProgress.onChange((latest) => {
+    const unsubscribe = pathProgress.on("change", (latest) => {
       if (avatarPathRef.current && pathLength) {
         const point = avatarPathRef.current.getPointAtLength(
           latest * pathLength
@@ -338,13 +337,17 @@ export default function HomePage() {
 
   // When animation completes (pathProgress reaches 1) for a new segment, update prevAvatarIndex.
   useEffect(() => {
-    const unsubscribe = pathProgress.onChange((latest) => {
-      if (latest === 1 && avatarIndex > prevAvatarIndex) {
-        setPrevAvatarIndex(avatarIndex);
+    const unsubscribe = pathProgress.on("change", (latest) => {
+      if (avatarPathRef.current && pathLength) {
+        const point = avatarPathRef.current.getPointAtLength(
+          latest * pathLength
+        );
+        avatarX.set(point.x);
+        avatarY.set(point.y);
       }
     });
     return unsubscribe;
-  }, [pathProgress, avatarIndex, prevAvatarIndex]);
+  }, [pathProgress, pathLength, avatarX, avatarY]);
 
   // Convert a coordinate to percentage for node positioning.
   const toPercentage = (point) => ({
@@ -373,7 +376,7 @@ export default function HomePage() {
 
     toast.promise(animationPromise, {
       loading: `Completing ${roadmapData[index].moduleTitle}`,
-      success: `Navigating to ${roadmapData[index + 1].moduleTitle}...`,
+      success: `Navigating to ${roadmapData[index].moduleTitle}...`,
       error: `Failed to complete ${roadmapData[index].moduleTitle}`,
     });
 
@@ -391,12 +394,30 @@ export default function HomePage() {
         Interactive Roadmap
       </h1>
 
+      <div className="text-center sm:text-left px-8 sm:px-16 mt-4">
+        <button
+          onClick={() => {
+            // Reset the progress for all lessons
+            setProgress(roadmapData.map(() => false));
+            // Reset the animation state for the avatar
+            setPrevAvatarIndex(0);
+            pathProgress.set(0);
+            // Immediately reset the avatar's position to the first node
+            avatarX.set(stepPositions[0].x);
+            avatarY.set(stepPositions[0].y);
+          }}
+          className="px-2 py-1 text-xs border border-[rgba(220,38,38,1)] text-[rgba(220,38,38,1)] hover:border-[rgba(220,38,38,0.8)] hover:text-[rgba(220,38,38,0.8)] rounded-full cursor-pointer"
+        >
+          Reset Progress
+        </button>
+      </div>
+
       {/* Outer container: position relative so we can absolutely position SVG + nodes.
           The container now uses full available width but is capped by maxWidth based on device type,
           and overflow is visible so info cards aren't clipped. */}
       <div
         ref={containerRef}
-        className="relative mx-auto w-full overflow-visible mt-16"
+        className="relative mx-auto w-full overflow-visible mt-24 sm:mt-16"
         style={{
           height: computedHeight,
           maxWidth: isMobile ? "300px" : "480px",
